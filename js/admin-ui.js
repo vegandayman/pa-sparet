@@ -331,6 +331,13 @@ function renderDestinationTriviaCard(q, qIdx, roundIndex, handlers) {
   imageInput.addEventListener("change", () => onChange({ imageUrl: imageInput.value || null }));
   card.appendChild(makeField("Image URL (optional)", imageInput));
 
+  const videoInput = document.createElement("input");
+  videoInput.type = "text";
+  videoInput.placeholder = "https://www.youtube.com/watch?v=... (optional — shown instead of image if set)";
+  videoInput.value = q.videoUrl || "";
+  videoInput.addEventListener("change", () => onChange({ videoUrl: videoInput.value || null }));
+  card.appendChild(makeField("Video clue URL (optional, overrides image)", videoInput));
+
   const toggle = document.createElement("div");
   toggle.className = "input-mode-toggle";
   const mcBtn = document.createElement("button");
@@ -512,12 +519,29 @@ function renderClosestWinsCard(q, qIdx, roundIndex, handlers) {
   const card = renderQuestionCardShell(qIdx, roundIndex, handlers);
   const onChange = (patch) => handlers.onQuestionChange(roundIndex, qIdx, patch);
 
-  const promptInput = document.createElement("textarea");
-  promptInput.rows = 2;
-  promptInput.placeholder = "What should players locate?";
-  promptInput.value = q.prompt;
-  promptInput.addEventListener("change", () => onChange({ prompt: promptInput.value }));
-  card.appendChild(makeField("Prompt", promptInput));
+  const imageInput = document.createElement("input");
+  imageInput.type = "text";
+  imageInput.placeholder = "https://... (photo shown to players as the location clue)";
+  imageInput.value = q.imageUrl || "";
+  imageInput.addEventListener("change", () => onChange({ imageUrl: imageInput.value }));
+  card.appendChild(makeField("Location image URL (required)", imageInput));
+
+  // Live preview of the image so the author can verify it loads.
+  const preview = document.createElement("img");
+  preview.style.cssText = "max-width:100%;max-height:180px;border-radius:6px;object-fit:cover;display:" + (q.imageUrl ? "block" : "none") + ";margin-bottom:1rem;border:1px solid var(--color-slate-dim)";
+  if (q.imageUrl) preview.src = q.imageUrl;
+  imageInput.addEventListener("change", () => {
+    if (imageInput.value) { preview.src = imageInput.value; preview.style.display = "block"; }
+    else { preview.style.display = "none"; }
+  });
+  card.appendChild(preview);
+
+  const captionInput = document.createElement("input");
+  captionInput.type = "text";
+  captionInput.placeholder = "e.g. Where was this photo taken? (optional)";
+  captionInput.value = q.caption || "";
+  captionInput.addEventListener("change", () => onChange({ caption: captionInput.value || null }));
+  card.appendChild(makeField("Caption (optional hint shown below image)", captionInput));
 
   const mapField = document.createElement("div");
   mapField.className = "field";

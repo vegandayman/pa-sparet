@@ -11,6 +11,17 @@ import { ROUND_TYPES, ROUND_TYPE_LABELS, WHERE_ARE_WE_GOING_DEFAULT_POINTS }
   from "./quiz-schema.js";
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function getYTEmbedUrl(url) {
+  if (!url) return "";
+  const match = url.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  const id = match ? match[1] : "";
+  return id ? `https://www.youtube.com/embed/${id}?autoplay=1` : "";
+}
+
+// ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
@@ -415,11 +426,21 @@ function renderWawgScreen(questionState, questionData) {
 
 function renderTriviaMCScreen(questionData) {
   const imgEl = document.getElementById("triviaMCImage");
-  if (questionData.imageUrl) {
+  const videoEl = document.getElementById("triviaMCVideo");
+  if (questionData.videoUrl) {
+    // Video takes priority over image.
+    if (videoEl) {
+      videoEl.src = getYTEmbedUrl(questionData.videoUrl);
+      videoEl.style.display = "block";
+    }
+    imgEl.style.display = "none";
+  } else if (questionData.imageUrl) {
     imgEl.src = questionData.imageUrl;
     imgEl.style.display = "block";
+    if (videoEl) videoEl.style.display = "none";
   } else {
     imgEl.style.display = "none";
+    if (videoEl) videoEl.style.display = "none";
   }
 
   document.getElementById("triviaMCPrompt").textContent = questionData.prompt;
@@ -460,11 +481,20 @@ function handleMCSelect(selectedIdx, questionData, container) {
 
 function renderTriviaFTScreen(questionData) {
   const imgEl = document.getElementById("triviaFTImage");
-  if (questionData.imageUrl) {
+  const videoEl = document.getElementById("triviaFTVideo");
+  if (questionData.videoUrl) {
+    if (videoEl) {
+      videoEl.src = getYTEmbedUrl(questionData.videoUrl);
+      videoEl.style.display = "block";
+    }
+    imgEl.style.display = "none";
+  } else if (questionData.imageUrl) {
     imgEl.src = questionData.imageUrl;
     imgEl.style.display = "block";
+    if (videoEl) videoEl.style.display = "none";
   } else {
     imgEl.style.display = "none";
+    if (videoEl) videoEl.style.display = "none";
   }
 
   document.getElementById("triviaFTPrompt").textContent = questionData.prompt;
@@ -571,7 +601,18 @@ function handleMusicSubmit(questionData) {
 // ---------------------------------------------------------------------------
 
 function renderClosestWinsScreen(questionState, questionData) {
-  document.getElementById("cwPrompt").textContent = questionData.prompt;
+  // Show the location image (primary clue) and optional caption.
+  const cwPromptEl = document.getElementById("cwPrompt");
+  const cwImageEl = document.getElementById("cwImage");
+  if (cwImageEl) {
+    if (questionData.imageUrl) {
+      cwImageEl.src = questionData.imageUrl;
+      cwImageEl.style.display = "block";
+    } else {
+      cwImageEl.style.display = "none";
+    }
+  }
+  cwPromptEl.textContent = questionData.caption || "Where was this photo taken?";
 
   // Timer bar.
   clearInterval(state.cwTimerInterval);

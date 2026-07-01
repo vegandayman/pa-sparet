@@ -32,7 +32,8 @@
 // {
 //   id: string,
 //   prompt: string,
-//   imageUrl: string | null,
+//   imageUrl: string | null,   // optional still image clue
+//   videoUrl: string | null,   // optional YouTube video clue (takes priority over image)
 //   inputMode: "multiple-choice" | "free-text",
 //   options: [string, string, string, string] | null,  // only for multiple-choice
 //   correctOption: number | null,                       // index into options, only for MC
@@ -53,7 +54,8 @@
 // closest-wins:
 // {
 //   id: string,
-//   prompt: string,
+//   imageUrl: string,          // photo shown as the location clue (required)
+//   caption: string | null,    // optional short text hint below the image
 //   targetLat: number,
 //   targetLng: number,
 //   points: 2,
@@ -99,6 +101,7 @@ function createBlankQuestion(type) {
         id: generateId("dt"),
         prompt: "",
         imageUrl: null,
+        videoUrl: null,
         inputMode: "multiple-choice",
         options: ["", "", "", ""],
         correctOption: 0,
@@ -118,7 +121,8 @@ function createBlankQuestion(type) {
     case ROUND_TYPES.CLOSEST_WINS:
       return {
         id: generateId("cw"),
-        prompt: "",
+        imageUrl: "",
+        caption: null,
         targetLat: 0,
         targetLng: 0,
         points: 2,
@@ -194,7 +198,7 @@ function validateQuestion(type, q, roundIdx, qIdx) {
       break;
 
     case ROUND_TYPES.CLOSEST_WINS:
-      if (!q.prompt || !q.prompt.trim()) errors.push(`${loc}: missing prompt`);
+      if (!q.imageUrl || !q.imageUrl.trim()) errors.push(`${loc}: missing location image URL`);
       if (typeof q.targetLat !== "number" || q.targetLat < -90 || q.targetLat > 90) {
         errors.push(`${loc}: invalid targetLat`);
       }
@@ -314,7 +318,8 @@ function createSampleQuiz() {
         questions: [
           {
             id: generateId("cw"),
-            prompt: "Pinpoint the location of the Eiffel Tower.",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Tour_Eiffel_Wikimedia_Commons.jpg/800px-Tour_Eiffel_Wikimedia_Commons.jpg",
+            caption: "Where was this photo taken?",
             targetLat: 48.8584,
             targetLng: 2.2945,
             points: 2,

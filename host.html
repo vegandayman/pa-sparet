@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Host — På Spåret</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/host.css" />
+</head>
+<body>
+<div class="host-shell">
+
+  <!-- LOBBY -->
+  <div class="host-screen lobby-host-screen is-active" id="hostScreenLobby">
+    <div class="lobby-game-title">På Spåret</div>
+    <div class="lobby-join-instruction">
+      Join at <span class="join-url">vegandayman.github.io/pa-sparet/player.html</span>
+    </div>
+    <div class="lobby-room-code-display" id="hostLobbyCode">—</div>
+    <div class="lobby-player-list" id="hostPlayerList"></div>
+  </div>
+
+  <!-- TRANSITION CARD -->
+  <div class="host-screen transition-host-screen" id="hostScreenTransition">
+    <div class="transition-host-icon" id="hostTransitionIcon"></div>
+    <div class="transition-host-round-num" id="hostTransitionRoundNum"></div>
+    <div class="transition-host-title" id="hostTransitionTitle"></div>
+  </div>
+
+  <!-- RULE EXPLAINER -->
+  <div class="host-screen explainer-host-screen" id="hostScreenExplainer">
+    <div class="explainer-host-title" id="hostExplainerTitle"></div>
+    <div class="explainer-host-body" id="hostExplainerBody"></div>
+  </div>
+
+  <!-- WHERE ARE WE GOING -->
+  <div class="host-screen wawg-host-screen" id="hostScreenWawg">
+    <div class="wawg-layout">
+      <div class="wawg-video-container" id="wawgVideoContainer">
+        <div id="wawgYTPlayer"></div>
+      </div>
+      <div class="wawg-side">
+        <div class="wawg-clues-list" id="wawgCluesList"></div>
+        <div class="wawg-answer-reveal" id="wawgAnswerReveal" style="display:none">
+          <h3>Answer</h3>
+          <div class="answer-text" id="wawgAnswerText"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DESTINATION TRIVIA -->
+  <div class="host-screen trivia-host-screen" id="hostScreenTrivia">
+    <img class="trivia-host-image" id="hostTriviaImage" src="" alt="" style="display:none" />
+    <div class="trivia-host-prompt" id="hostTriviaPrompt"></div>
+    <div class="trivia-mc-options" id="hostTriviaMCOptions" style="display:none"></div>
+    <div class="answer-review-panel" id="triviaAnswerReview" style="display:none">
+      <h3>Answers submitted</h3>
+      <div id="triviaAnswerRows"></div>
+    </div>
+  </div>
+
+  <!-- MUSIC ROUND -->
+  <div class="host-screen music-host-screen" id="hostScreenMusic">
+    <div class="music-layout">
+      <div class="music-video-container">
+        <div id="musicYTPlayer"></div>
+      </div>
+      <div class="music-blanks-host" id="musicBlanksHost"></div>
+    </div>
+    <div class="answer-review-panel" id="musicAnswerReview" style="display:none">
+      <h3>Answers submitted</h3>
+      <div id="musicAnswerRows"></div>
+    </div>
+  </div>
+
+  <!-- CLOSEST WINS -->
+  <div class="host-screen cw-host-screen" id="hostScreenCW">
+    <div class="cw-host-layout">
+      <div class="cw-host-map-container">
+        <div id="hostMap"></div>
+      </div>
+      <div class="cw-host-side">
+        <div class="cw-host-prompt" id="cwHostPrompt"></div>
+        <div class="cw-timer-display" id="cwHostTimer">—</div>
+        <div class="cw-pins-list" id="cwPinsList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ROUND RECAP -->
+  <div class="host-screen recap-host-screen" id="hostScreenRecap">
+    <h2 id="recapTitle">Round recap</h2>
+    <div id="recapContent"></div>
+  </div>
+
+  <!-- ROUND SCOREBOARD -->
+  <div class="host-screen scoreboard-host-screen" id="hostScreenScoreboard">
+    <h2 id="scoreboardHostTitle">Scoreboard</h2>
+    <ul class="scoreboard-host-list" id="scoreboardHostList"></ul>
+  </div>
+
+  <!-- FINAL CEREMONY -->
+  <div class="host-screen ceremony-host-screen" id="hostScreenCeremony">
+    <div class="ceremony-host-eyebrow">Winner</div>
+    <div class="ceremony-host-winner" id="ceremonyHostWinner"></div>
+    <div class="ceremony-host-score" id="ceremonyHostScore"></div>
+    <div class="ceremony-tiebreak" id="ceremonyHostTiebreak" style="display:none"></div>
+    <ul class="ceremony-final-standings" id="ceremonyFinalStandings"></ul>
+  </div>
+
+</div>
+
+<!-- HOST CONTROL BAR (always visible) -->
+<div class="host-controls">
+  <div class="host-controls-left">
+    <div class="host-room-code">
+      Room: <span id="controlBarRoomCode">—</span>
+    </div>
+    <div class="host-status-label" id="controlBarStatus"></div>
+  </div>
+  <div class="host-controls-center">
+    <button class="btn btn-secondary" id="hostPrevBtn" style="display:none">← Back</button>
+    <button class="btn btn-primary" id="hostNextBtn">Start game</button>
+  </div>
+  <div class="host-controls-right">
+    <button class="btn btn-secondary" id="hostRevealClueBtn" style="display:none">Reveal next clue</button>
+    <button class="btn btn-secondary" id="hostLockBtn" style="display:none">Lock answers</button>
+    <button class="btn btn-secondary" id="hostRevealAnswerBtn" style="display:none">Reveal answer</button>
+    <button class="btn btn-secondary" id="hostLoadQuizBtn">Load quiz</button>
+    <input type="file" id="hostQuizFileInput" accept=".json" class="visually-hidden" />
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script type="module" src="js/host.js"></script>
+</body>
+</html>
