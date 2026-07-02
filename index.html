@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>På Spåret</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <style>
+    body { display:flex; align-items:center; justify-content:center; min-height:100vh; }
+    .landing { display:flex; flex-direction:column; align-items:center; gap:var(--space-6); text-align:center; padding:var(--space-8); }
+    .landing-title { font-family:var(--font-display); font-size:var(--text-3xl); color:var(--color-brass); letter-spacing:-0.02em; }
+    .landing-subtitle { font-size:var(--text-sm); color:var(--color-slate); letter-spacing:0.12em; text-transform:uppercase; margin-top:calc(-1 * var(--space-4)); }
+    .landing-cards { display:flex; gap:var(--space-4); flex-wrap:wrap; justify-content:center; }
+    .landing-card { display:flex; flex-direction:column; align-items:center; gap:var(--space-3); padding:var(--space-6) var(--space-8); background:var(--color-panel); border:1px solid var(--color-slate-dim); border-radius:var(--radius-lg); text-decoration:none; color:var(--color-parchment); min-width:180px; transition:border-color var(--duration-fast), transform var(--duration-fast); }
+    .landing-card:hover { border-color:var(--color-brass); transform:translateY(-2px); }
+    .landing-card-icon { font-size:2.5rem; }
+    .landing-card-title { font-family:var(--font-display); font-size:var(--text-lg); }
+    .landing-card-desc { font-size:var(--text-xs); color:var(--color-slate); text-align:center; }
+  </style>
+</head>
+<body>
+  <div class="landing">
+    <div class="landing-title">På Spåret</div>
+    <div class="landing-subtitle">Multiplayer Quiz</div>
+    <div class="landing-cards">
+      <a class="landing-card" href="host.html">
+        <span class="landing-card-icon">📺</span>
+        <span class="landing-card-title">Host</span>
+        <span class="landing-card-desc">Open on the TV screen</span>
+      </a>
+      <a class="landing-card" href="player.html">
+        <span class="landing-card-icon">📱</span>
+        <span class="landing-card-title">Join</span>
+        <span class="landing-card-desc">Open on your phone</span>
+      </a>
+      <a class="landing-card" href="admin.html">
+        <span class="landing-card-icon">✏️</span>
+        <span class="landing-card-title">Quiz Builder</span>
+        <span class="landing-card-desc">Create & edit quizzes</span>
+      </a>
+    </div>
+  </div>
+</body>
+</html>
