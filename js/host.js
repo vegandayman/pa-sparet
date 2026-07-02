@@ -7,8 +7,9 @@ import { initFirebase, ROOM_STATUS, createRoom, setRoomStatus,
   setCurrentRoundQuestion, setCurrentQuestion, updateCurrentQuestion,
   lockCurrentQuestion, revealCurrentQuestion, joinRoom, awardPoints,
   listenToMeta, listenToPlayers, listenToAnswersForQuestion,
-  fetchAnswersForQuestions, fetchFinalGameData, hasRoundTypeBeenExplained,
-  markRoundTypeExplained, roomExists, deleteRoom } from "./firebase-sync.js";
+  listenToCurrentQuestion, fetchAnswersForQuestions, fetchFinalGameData,
+  hasRoundTypeBeenExplained, markRoundTypeExplained, roomExists,
+  deleteRoom } from "./firebase-sync.js";
 
 import { ROUND_TYPES, ROUND_TYPE_LABELS, validateQuiz,
   WHERE_ARE_WE_GOING_DEFAULT_POINTS, WHERE_ARE_WE_GOING_CLUE_COUNT }
@@ -23,7 +24,8 @@ import { createPlayer, play, pause, stop, destroyAll } from "./host-media.js";
 import { showHostScreen, updateControlBar, renderLobby, renderTransitionCard,
   renderExplainer, renderWawgScreen, renderTriviaScreen, renderAnswerReview,
   renderMusicScreen, renderCWScreen, renderCWPins, updateCWTimer,
-  renderRoundRecap, renderScoreboard, renderCeremony } from "./host-ui.js";
+  renderRoundRecap, renderScoreboard, renderCeremony,
+  renderQuizSummary } from "./host-ui.js";
 
 // ---------------------------------------------------------------------------
 // Explainer texts (same copy as player.js — single source ideally, but kept
@@ -70,8 +72,10 @@ let cwTimerInterval = null;
 // Firebase listeners.
 let unsubMeta = null;
 let unsubPlayers = null;
+let unsubCurrentQuestion = null;
 let latestPlayers = {};
 let latestMeta = null;
+let latestCurrentQuestion = null;
 
 const HOST_STORAGE_KEY = "po-sparet-host";
 
@@ -106,6 +110,8 @@ function getYTEmbedUrl(url) {
 function startListening() {
   if (unsubMeta) unsubMeta();
   if (unsubPlayers) unsubPlayers();
+  if (unsubCurrentQuestion) unsubCurrentQuestion();
+
   unsubMeta = listenToMeta(roomCode, meta => {
     latestMeta = meta;
     syncControlBar(meta);
@@ -115,6 +121,9 @@ function startListening() {
     if (latestMeta?.status === ROOM_STATUS.LOBBY) {
       renderLobby(roomCode, latestPlayers);
     }
+  });
+  unsubCurrentQuestion = listenToCurrentQuestion(roomCode, cq => {
+    latestCurrentQuestion = cq;
   });
 }
 
@@ -362,7 +371,7 @@ function renderQuestion(round, q, roundIndex, questionIndex, state) {
 
   switch (round.type) {
     case ROUND_TYPES.WHERE_ARE_WE_GOING: {
-      const clueIndex = state === "active" ? 0 : (latestMeta?.currentQuestion?.clueIndex ?? 0);
+      const clueIndex = latestCurrentQuestion?.clueIndex ?? 0;
       renderWawgScreen(q, clueIndex, state);
       if (state === "active") {
         createPlayer("wawgYTPlayer", q.youtubeUrl, { autoplay: false })
@@ -403,12 +412,16 @@ async function revealNextClue() {
   const round = quiz.rounds[latestMeta.currentRoundIndex];
   if (round.type !== ROUND_TYPES.WHERE_ARE_WE_GOING) return;
 
-  const currentClue = latestMeta.currentQuestion?.clueIndex ?? 0;
+  const currentClue = latestCurrentQuestion?.clueIndex ?? 0;
   const q = round.questions[latestMeta.currentQuestionIndex];
   const nextClue = Math.min(currentClue + 1, q.clues.length - 1);
 
+  if (nextClue === currentClue) return; // already on last clue, nothing to do
+
   await updateCurrentQuestion(roomCode, { clueIndex: nextClue });
-  renderWawgScreen(q, nextClue, "active");
+  // latestCurrentQuestion will update via the listener, but re-render
+  // immediately so the host sees the change without waiting for the round trip.
+  renderWawgScreen(q, nextClue, gamePhase === "revealed" ? "revealed" : "active");
 }
 
 // ---------------------------------------------------------------------------
@@ -656,7 +669,7 @@ function handleQuizFile(event) {
         return;
       }
       quiz = parsed;
-      alert(`Quiz loaded: "${quiz.title}" (${quiz.rounds.length} rounds)`);
+      renderQuizSummary(quiz);
       syncControlBar(latestMeta || { status: ROOM_STATUS.LOBBY });
     } catch (e) {
       alert("Could not parse quiz file: " + e.message);
@@ -674,8 +687,9 @@ async function init() {
   try {
     initFirebase();
   } catch (e) {
+    console.error("Firebase init error:", e);
     showHostScreen("hostScreenLobby");
-    document.getElementById("hostLobbyCode").textContent = "Firebase error";
+    document.getElementById("hostLobbyCode").textContent = "Setup error";
     document.querySelector(".lobby-join-instruction").textContent = e.message;
     return;
   }
@@ -708,12 +722,20 @@ async function init() {
   }
 
   // Create a fresh room.
-  roomCode = await createRoom({}, hostId);
-  saveHostSession();
-  startListening();
-  showHostScreen("hostScreenLobby");
-  renderLobby(roomCode, {});
-  syncControlBar({ status: ROOM_STATUS.LOBBY });
+  try {
+    roomCode = await createRoom(null, hostId);
+    saveHostSession();
+    startListening();
+    showHostScreen("hostScreenLobby");
+    renderLobby(roomCode, {});
+    syncControlBar({ status: ROOM_STATUS.LOBBY });
+  } catch (e) {
+    console.error("Failed to create room:", e);
+    showHostScreen("hostScreenLobby");
+    document.getElementById("hostLobbyCode").textContent = "Error";
+    document.querySelector(".lobby-join-instruction").textContent =
+      "Could not create room: " + e.message + " — check the console for details.";
+  }
 }
 
 document.addEventListener("DOMContentLoaded", init);

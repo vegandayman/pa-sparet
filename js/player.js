@@ -5,7 +5,7 @@
 
 import { initFirebase, ROOM_STATUS, joinRoom, submitAnswer,
   listenToMeta, listenToCurrentQuestion, listenToPlayers,
-  roomExists, renamePlayer } from "./firebase-sync.js";
+  listenToRoom, roomExists, renamePlayer } from "./firebase-sync.js";
 
 import { ROUND_TYPES, ROUND_TYPE_LABELS, WHERE_ARE_WE_GOING_DEFAULT_POINTS }
   from "./quiz-schema.js";
@@ -222,17 +222,18 @@ function handleMetaChange(meta) {
 }
 
 async function fetchQuiz() {
-  // Lightweight one-time read of the quiz object from the room.
-  // firebase-sync doesn't expose a fetchQuiz helper, so we use the
-  // underlying Firebase get() directly via a listenToRoom trick:
-  // we read the whole room once and pull out quiz.
-  // (A one-time read is fine here; the quiz never changes mid-game.)
-  const { get, ref, getDatabase } = await import(
-    "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js"
-  );
-  const db = getDatabase();
-  const snap = await get(ref(db, `rooms/${state.roomCode}/quiz`));
-  latestQuiz = snap.val();
+  // One-time read of the quiz from the room node. We use listenToRoom
+  // with an immediate unsubscribe after the first value arrives — cleaner
+  // than a dynamic import and works reliably on GitHub Pages.
+  return new Promise((resolve) => {
+    const unsub = listenToRoom(state.roomCode, (room) => {
+      if (room?.quiz) {
+        latestQuiz = room.quiz;
+        unsub(); // stop listening after first value
+        resolve();
+      }
+    });
+  });
 }
 
 function handleQuestionChange(question) {

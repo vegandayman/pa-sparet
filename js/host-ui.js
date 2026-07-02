@@ -64,6 +64,65 @@ export function renderLobby(roomCode, players) {
 }
 
 // ---------------------------------------------------------------------------
+// Quiz summary (shown in lobby after a quiz is loaded)
+// ---------------------------------------------------------------------------
+
+export function renderQuizSummary(quiz) {
+  const el = document.getElementById("lobbyQuizSummary");
+  if (!el) return;
+
+  if (!quiz) {
+    el.style.display = "none";
+    return;
+  }
+
+  const totalQuestions = quiz.rounds.reduce((sum, r) => sum + r.questions.length, 0);
+
+  el.innerHTML = "";
+  el.style.display = "";
+
+  const title = document.createElement("div");
+  title.className = "quiz-summary-title";
+  title.textContent = quiz.title;
+  el.appendChild(title);
+
+  const meta = document.createElement("div");
+  meta.className = "quiz-summary-meta";
+  meta.textContent = `${quiz.rounds.length} round${quiz.rounds.length === 1 ? "" : "s"} · ${totalQuestions} question${totalQuestions === 1 ? "" : "s"} total`;
+  el.appendChild(meta);
+
+  const roundsEl = document.createElement("div");
+  roundsEl.className = "quiz-summary-rounds";
+
+  quiz.rounds.forEach((round, idx) => {
+    const chip = document.createElement("div");
+    chip.className = "quiz-summary-round-chip";
+
+    const num = document.createElement("span");
+    num.className = "chip-num";
+    num.textContent = `R${idx + 1}`;
+
+    const icon = document.createElement("span");
+    icon.textContent = ROUND_TYPE_ICONS[round.type] || "❓";
+
+    const name = document.createElement("span");
+    name.textContent = round.title;
+
+    const qs = document.createElement("span");
+    qs.className = "chip-qs";
+    qs.textContent = `×${round.questions.length}`;
+
+    chip.appendChild(num);
+    chip.appendChild(icon);
+    chip.appendChild(name);
+    chip.appendChild(qs);
+    roundsEl.appendChild(chip);
+  });
+
+  el.appendChild(roundsEl);
+}
+
+// ---------------------------------------------------------------------------
 // Transition card
 // ---------------------------------------------------------------------------
 
