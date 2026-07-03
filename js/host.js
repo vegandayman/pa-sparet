@@ -77,23 +77,30 @@ let latestPlayers = {};
 let latestMeta = null;
 let latestCurrentQuestion = null;
 
-const HOST_STORAGE_KEY = "po-sparet-host";
+const HOST_STORAGE_KEY = "po-sparet-host-session";
 
 // ---------------------------------------------------------------------------
 // Persistence
+// Using sessionStorage (not localStorage) so the room is only rejoined
+// within the same browser tab session — a new tab or window always gets
+// a fresh room. localStorage was causing stale rooms to persist between games.
 // ---------------------------------------------------------------------------
 
 function saveHostSession() {
   try {
-    localStorage.setItem(HOST_STORAGE_KEY, JSON.stringify({ roomCode, hostId }));
+    sessionStorage.setItem(HOST_STORAGE_KEY, JSON.stringify({ roomCode, hostId }));
   } catch (e) { /* ignore */ }
 }
 
 function loadHostSession() {
   try {
-    const raw = localStorage.getItem(HOST_STORAGE_KEY);
+    const raw = sessionStorage.getItem(HOST_STORAGE_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch (e) { return null; }
+}
+
+function clearHostSession() {
+  try { sessionStorage.removeItem(HOST_STORAGE_KEY); } catch (e) { /* ignore */ }
 }
 
 function getYTEmbedUrl(url) {
@@ -115,6 +122,13 @@ function startListening() {
   unsubMeta = listenToMeta(roomCode, meta => {
     latestMeta = meta;
     syncControlBar(meta);
+    // Re-render the active question screen if we're in QUESTION_ACTIVE state,
+    // so a host page refresh correctly restores the current question view.
+    if (meta?.status === ROOM_STATUS.QUESTION_ACTIVE && quiz && latestCurrentQuestion) {
+      const round = quiz.rounds[meta.currentRoundIndex];
+      const q = round?.questions[meta.currentQuestionIndex];
+      if (q) renderQuestion(round, q, meta.currentRoundIndex, meta.currentQuestionIndex, gamePhase);
+    }
   });
   unsubPlayers = listenToPlayers(roomCode, players => {
     latestPlayers = players || {};
@@ -680,6 +694,42 @@ function handleQuizFile(event) {
 }
 
 // ---------------------------------------------------------------------------
+// New room (reset between games)
+// ---------------------------------------------------------------------------
+
+async function handleNewRoom() {
+  if (!confirm("Start a new room? This will end the current game for all players.")) return;
+  try {
+    if (roomCode) await deleteRoom(roomCode);
+  } catch (e) { /* ignore if already gone */ }
+  clearHostSession();
+  if (unsubMeta) { unsubMeta(); unsubMeta = null; }
+  if (unsubPlayers) { unsubPlayers(); unsubPlayers = null; }
+  if (unsubCurrentQuestion) { unsubCurrentQuestion(); unsubCurrentQuestion = null; }
+  if (activeAnswerUnsub) { activeAnswerUnsub(); activeAnswerUnsub = null; }
+  destroyAllMedia();
+  quiz = null;
+  roomCode = null;
+  latestMeta = null;
+  latestPlayers = {};
+  latestCurrentQuestion = null;
+  activeAnswers = {};
+  gamePhase = "pre-game";
+
+  try {
+    roomCode = await createRoom(null, hostId);
+    saveHostSession();
+    startListening();
+    showHostScreen("hostScreenLobby");
+    renderLobby(roomCode, {});
+    renderQuizSummary(null);
+    syncControlBar({ status: ROOM_STATUS.LOBBY });
+  } catch (e) {
+    console.error("Failed to create new room:", e);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
 
@@ -707,6 +757,7 @@ async function init() {
     document.getElementById("hostQuizFileInput").click();
   });
   document.getElementById("hostQuizFileInput").addEventListener("change", handleQuizFile);
+  document.getElementById("hostNewRoomBtn").addEventListener("click", handleNewRoom);
 
   // Try to rejoin an existing room (host browser refresh mid-game).
   if (session?.roomCode) {

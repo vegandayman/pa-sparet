@@ -212,10 +212,12 @@ function handleMetaChange(meta) {
   if (!meta) return;
   latestMeta = meta;
 
-  // Fetch the quiz if we don't have it yet (needed to render questions
-  // and transition cards).
+  // Fetch the quiz if we don't have it yet, then re-render once it arrives.
+  // Without the re-render after fetch, players get stuck on "Loading question"
+  // because the first renderForStatus call fires before latestQuiz is ready.
   if (!latestQuiz) {
-    fetchQuiz();
+    fetchQuiz().then(() => renderForStatus(meta.status, meta));
+    return; // don't render yet — wait for quiz to arrive
   }
 
   renderForStatus(meta.status, meta);
@@ -238,7 +240,7 @@ async function fetchQuiz() {
 
 function handleQuestionChange(question) {
   latestQuestion = question;
-  if (!latestMeta) return;
+  if (!latestMeta || !latestQuiz) return;
   renderForStatus(latestMeta.status, latestMeta);
 }
 
