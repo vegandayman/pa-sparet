@@ -212,15 +212,16 @@ function handleMetaChange(meta) {
   if (!meta) return;
   latestMeta = meta;
 
-  // Fetch the quiz if we don't have it yet, then re-render once it arrives.
-  // Without the re-render after fetch, players get stuck on "Loading question"
-  // because the first renderForStatus call fires before latestQuiz is ready.
-  if (!latestQuiz) {
-    fetchQuiz().then(() => renderForStatus(meta.status, meta));
-    return; // don't render yet — wait for quiz to arrive
-  }
-
+  // Always render immediately with whatever we have.
   renderForStatus(meta.status, meta);
+
+  // If we don't have the quiz yet, fetch it and re-render once it arrives.
+  // This covers the case where meta fires before the quiz fetch completes.
+  if (!latestQuiz) {
+    fetchQuiz().then(() => {
+      if (latestMeta) renderForStatus(latestMeta.status, latestMeta);
+    });
+  }
 }
 
 async function fetchQuiz() {
@@ -240,7 +241,10 @@ async function fetchQuiz() {
 
 function handleQuestionChange(question) {
   latestQuestion = question;
-  if (!latestMeta || !latestQuiz) return;
+  if (!latestMeta) return;
+  // Re-render whenever the question changes — this catches the case where
+  // the player was showing "Question incoming..." waiting for latestQuestion
+  // to arrive, and now it has.
   renderForStatus(latestMeta.status, latestMeta);
 }
 
@@ -264,20 +268,22 @@ function renderForStatus(status, meta) {
       break;
 
     case ROOM_STATUS.TRANSITION_CARD:
+      if (!latestQuiz) { showWaiting("Get ready…", "Loading round info…"); return; }
       renderTransitionCard(meta);
       break;
 
     case ROOM_STATUS.RULE_EXPLAINER:
+      if (!latestQuiz) { showWaiting("Get ready…", "Loading round info…"); return; }
       renderExplainer(meta);
       break;
 
     case ROOM_STATUS.QUESTION_ACTIVE:
+      if (!latestQuiz) { showWaiting("Get ready…", "Loading question…"); return; }
+      if (!latestQuestion) { showWaiting("Get ready…", "Question incoming…"); return; }
       renderActiveQuestion(latestQuestion, meta);
       break;
 
     case ROOM_STATUS.ROUND_RECAP:
-      // Players see a waiting screen during the host's round-recap display —
-      // the funny answers are the host's moment, not shown on phones.
       showWaiting("Round recap", "The host is reviewing everyone's answers…");
       break;
 

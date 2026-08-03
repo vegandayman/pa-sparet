@@ -88,14 +88,21 @@
 
   <!-- CLOSEST WINS -->
   <div class="host-screen cw-host-screen" id="hostScreenCW">
-    <div class="cw-host-layout">
-      <div class="cw-host-map-container">
-        <div id="hostMap"></div>
-      </div>
-      <div class="cw-host-side">
-        <img id="cwHostImage" src="" alt="Location clue" style="width:100%;max-height:200px;object-fit:cover;border-radius:var(--radius-md);border:1px solid var(--color-slate-dim);display:none" />
+    <!-- Image view: shown during question, hidden on reveal -->
+    <div id="cwImageView" style="display:flex;flex-direction:column;flex:1;align-items:center;justify-content:center;gap:var(--space-5);">
+      <img id="cwHostImage" src="" alt="Location clue" style="max-height:65vh;max-width:100%;object-fit:contain;border-radius:var(--radius-lg);border:1px solid var(--color-slate-dim);" />
+      <div style="display:flex;align-items:center;gap:var(--space-6);">
         <div class="cw-host-prompt" id="cwHostPrompt"></div>
         <div class="cw-timer-display" id="cwHostTimer">—</div>
+      </div>
+    </div>
+    <!-- Map view: hidden during question, shown on reveal -->
+    <div id="cwMapView" style="display:none;flex:1;min-height:0;gap:var(--space-4);flex-direction:row;" class="cw-host-layout">
+      <div class="cw-host-map-container" style="flex:1;min-height:0;">
+        <div id="hostMap" style="width:100%;height:100%;"></div>
+      </div>
+      <div class="cw-host-side" style="width:300px;">
+        <div class="cw-host-prompt" id="cwHostPromptReveal"></div>
         <div class="cw-pins-list" id="cwPinsList"></div>
       </div>
     </div>

@@ -410,9 +410,29 @@ function renderQuestion(round, q, roundIndex, questionIndex, state) {
       }
       break;
     case ROUND_TYPES.CLOSEST_WINS:
-      renderCWScreen(q);
-      initOrResetHostMap(q, state);
-      if (state === "active") startCWTimer(q.timeLimitSeconds);
+      renderCWScreen(q, state);
+      if (state === "active" || state === "locked") {
+        // Show image, hide map
+        const imgView = document.getElementById("cwImageView");
+        const mapView = document.getElementById("cwMapView");
+        if (imgView) imgView.style.display = "flex";
+        if (mapView) mapView.style.display = "none";
+        if (q.imageUrl) {
+          const img = document.getElementById("cwHostImage");
+          if (img) { img.src = q.imageUrl; }
+        }
+        if (state === "active") startCWTimer(q.timeLimitSeconds);
+      } else if (state === "revealed") {
+        // Swap to map view
+        const imgView = document.getElementById("cwImageView");
+        const mapView = document.getElementById("cwMapView");
+        if (imgView) imgView.style.display = "none";
+        if (mapView) { mapView.style.display = "flex"; }
+        // Copy prompt to reveal panel
+        const revealPrompt = document.getElementById("cwHostPromptReveal");
+        if (revealPrompt) revealPrompt.textContent = q.caption || "Where was this photo taken?";
+        initOrResetHostMap(q, state);
+      }
       break;
   }
 }
@@ -509,30 +529,28 @@ async function handleMusicOverride(q, playerId, answer) {
 // ---------------------------------------------------------------------------
 
 function initOrResetHostMap(q, state) {
-  if (!hostMap) {
-    hostMap = L.map("hostMap").setView([20, 0], 2);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "© OpenStreetMap contributors",
-      maxZoom: 18,
-    }).addTo(hostMap);
-    setTimeout(() => hostMap.invalidateSize(), 150);
-  } else {
-    // Clear all old markers.
-    Object.values(hostMapMarkers).forEach(m => hostMap.removeLayer(m));
-    hostMapMarkers = {};
-    if (targetMarker) { hostMap.removeLayer(targetMarker); targetMarker = null; }
-    hostMap.setView([20, 0], 2);
-    setTimeout(() => hostMap.invalidateSize(), 150);
-  }
+  // Defer map init until the map container is visible — Leaflet won't
+  // render correctly into a hidden element.
+  setTimeout(() => {
+    if (!hostMap) {
+      hostMap = L.map("hostMap").setView([20, 0], 2);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap contributors",
+        maxZoom: 18,
+      }).addTo(hostMap);
+    } else {
+      // Clear all old markers.
+      Object.values(hostMapMarkers).forEach(m => hostMap.removeLayer(m));
+      hostMapMarkers = {};
+      if (targetMarker) { hostMap.removeLayer(targetMarker); targetMarker = null; }
+      hostMap.setView([20, 0], 2);
+    }
+    hostMap.invalidateSize();
 
-  // Show the location image on the host map side panel.
-  const imgEl = document.getElementById("cwHostImage");
-  if (imgEl) {
-    if (q.imageUrl) { imgEl.src = q.imageUrl; imgEl.style.display = ""; }
-    else imgEl.style.display = "none";
-  }
-
-  if (state === "revealed") revealTargetOnMap(q);
+    // Place any pins already submitted before reveal.
+    if (latestCurrentQuestion) updateCWPinsOnMap(q);
+    if (state === "revealed") revealTargetOnMap(q);
+  }, 150);
 }
 
 function revealTargetOnMap(q) {
