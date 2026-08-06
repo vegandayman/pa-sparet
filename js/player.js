@@ -1,18 +1,7 @@
-// player.js
-// Mobile player view controller. Owns local player state (roomCode, playerId,
-// playerName), listens to Firebase for game state changes, and switches
-// between screen states accordingly. All answer submission goes through here.
+// player.js — Mobile player view controller
 
-import { initFirebase, ROOM_STATUS, joinRoom, submitAnswer,
-  listenToMeta, listenToCurrentQuestion, listenToPlayers,
-  listenToRoom, roomExists, renamePlayer } from "./firebase-sync.js";
-
-import { ROUND_TYPES, ROUND_TYPE_LABELS, WHERE_ARE_WE_GOING_DEFAULT_POINTS }
-  from "./quiz-schema.js";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+import { initFirebase, ROOM_STATUS, joinRoom, submitAnswer, listenToRoom, roomExists } from "./firebase-sync.js";
+import { ROUND_TYPES, WHERE_ARE_WE_GOING_DEFAULT_POINTS } from "./quiz-schema.js";
 
 function getYTEmbedUrl(url) {
   if (!url) return "";
@@ -21,12 +10,6 @@ function getYTEmbedUrl(url) {
   return id ? `https://www.youtube.com/embed/${id}?autoplay=1` : "";
 }
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const STORAGE_KEY = "po-sparet-player";
-
 const ROUND_TYPE_ICONS = {
   [ROUND_TYPES.WHERE_ARE_WE_GOING]: "🚂",
   [ROUND_TYPES.DESTINATION_TRIVIA]: "❓",
@@ -34,79 +17,63 @@ const ROUND_TYPE_ICONS = {
   [ROUND_TYPES.CLOSEST_WINS]: "📍",
 };
 
-// Rule explainer texts — one per round type.
-// WHERE_ARE_WE_GOING text is final (confirmed by Robbie).
-// Others are placeholders pending Robbie's edits.
 const ROUND_EXPLAINERS = {
-  [ROUND_TYPES.WHERE_ARE_WE_GOING]: {
-    title: "WHERE ARE WE GOING?",
-    body: "You are going to see a video of a journey. Your task is to guess the destination. The host will read clues which get increasingly easier. The quicker you get the answer right, the more points you get. When you are ready to guess, type the name of the destination CITY into the box and click Submit, then sit tight and wait for the journey to finish.",
-  },
-  [ROUND_TYPES.DESTINATION_TRIVIA]: {
-    title: "DESTINATION TRIVIA",
-    body: "You'll be asked a question about the destination — sometimes with an image. Some questions give you 4 multiple-choice options to pick from, others want you to type your own answer. Answer correctly to earn a point — speed doesn't matter here, so take your time and get it right.",
-  },
-  [ROUND_TYPES.MUSIC_ROUND]: {
-    title: "THE MUSIC ROUND",
-    body: "A song will play on the big screen. Your job is to identify it — depending on the question, you might need to name the artist, the song title, or both (sometimes more than one of each!). Type your answer into each box and submit. You get a point for every correct guess, so even a partial answer is worth something.",
-  },
-  [ROUND_TYPES.CLOSEST_WINS]: {
-    title: "CLOSEST WINS",
-    body: "You'll see a world map and a clue about a location. Drop a pin where you think it is before time runs out. Closest guess to the real location takes all the points — so trust your instincts and don't overthink it.",
-  },
+  [ROUND_TYPES.WHERE_ARE_WE_GOING]: { title: "WHERE ARE WE GOING?", body: "You are going to see a video of a journey. Your task is to guess the destination. The host will read clues which get increasingly easier. The quicker you get the answer right, the more points you get. When you are ready to guess, type the name of the destination CITY into the box and click Submit, then sit tight and wait for the journey to finish." },
+  [ROUND_TYPES.DESTINATION_TRIVIA]: { title: "DESTINATION TRIVIA", body: "You'll be asked a question about the destination — sometimes with an image. Some questions give you 4 multiple-choice options to pick from, others want you to type your own answer. Answer correctly to earn a point — speed doesn't matter here, so take your time and get it right." },
+  [ROUND_TYPES.MUSIC_ROUND]: { title: "THE MUSIC ROUND", body: "A song will play on the big screen. Your job is to identify it — depending on the question, you might need to name the artist, the song title, or both. Type your answer into each box and submit. You get a point for every correct guess." },
+  [ROUND_TYPES.CLOSEST_WINS]: { title: "CLOSEST WINS", body: "You'll see a photo of a location somewhere in the world. Drop a pin on the map where you think it is before time runs out. Closest guess to the real location takes all the points." },
 };
 
-// ---------------------------------------------------------------------------
-// State
-// ---------------------------------------------------------------------------
+const STORAGE_KEY = "po-sparet-player";
 
 let state = {
-  roomCode: null,
-  playerId: null,
-  playerName: null,
-  currentQuestionId: null,
-  hasSubmitted: false,
-  playerMap: null,
-  playerMarker: null,
-  cwTimerInterval: null,
-  unsubscribeMeta: null,
-  unsubscribeQuestion: null,
-  unsubscribePlayers: null,
+  roomCode: null, playerId: null, playerName: null,
+  currentQuestionId: null, hasSubmitted: false,
+  playerMap: null, playerMarker: null, pendingLat: null, pendingLng: null,
+  cwTimerInterval: null, unsubscribeRoom: null,
 };
 
-// ---------------------------------------------------------------------------
-// Persistence
-// ---------------------------------------------------------------------------
+// All game state from Firebase — updated atomically from a single listener
+let latestMeta = null, latestQuestion = null, latestPlayers = {}, latestQuiz = null;
 
-function saveSession() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      roomCode: state.roomCode,
-      playerId: state.playerId,
-      playerName: state.playerName,
-    }));
-  } catch (e) { /* ignore */ }
-}
-
-function loadSession() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch (e) { return null; }
-}
-
-function clearSession() {
-  try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
-}
-
-// ---------------------------------------------------------------------------
-// Screen switching
-// ---------------------------------------------------------------------------
+function saveSession() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ roomCode: state.roomCode, playerId: state.playerId, playerName: state.playerName })); } catch (e) {} }
+function loadSession() { try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } }
+function clearSession() { try { localStorage.removeItem(STORAGE_KEY); } catch (e) {} }
 
 function showScreen(id) {
   document.querySelectorAll(".screen").forEach(el => el.classList.remove("is-active"));
-  const screen = document.getElementById(id);
-  if (screen) screen.classList.add("is-active");
+  const el = document.getElementById(id);
+  if (el) el.classList.add("is-active");
+}
+
+// ---------------------------------------------------------------------------
+// Single room listener — no race conditions
+// ---------------------------------------------------------------------------
+
+function startListening() {
+  if (state.unsubscribeRoom) state.unsubscribeRoom();
+  state.unsubscribeRoom = listenToRoom(state.roomCode, handleRoomChange);
+}
+
+function handleRoomChange(room) {
+  if (!room) return;
+
+  const prevQuestionId = latestQuestion?.questionId;
+
+  latestMeta = room.meta || null;
+  latestQuestion = room.currentQuestion || null;
+  latestPlayers = room.players || {};
+  if (!latestQuiz && room.quiz) latestQuiz = room.quiz;
+
+  if (!latestMeta) return;
+
+  // Reset submission state when a genuinely new question arrives
+  if (latestQuestion?.questionId && latestQuestion.questionId !== prevQuestionId) {
+    state.currentQuestionId = latestQuestion.questionId;
+    state.hasSubmitted = false;
+  }
+
+  renderForStatus(latestMeta.status, latestMeta);
 }
 
 // ---------------------------------------------------------------------------
@@ -118,34 +85,16 @@ async function handleJoin() {
   const playerName = document.getElementById("joinPlayerName").value.trim();
   const errorEl = document.getElementById("joinError");
   errorEl.textContent = "";
-
-  if (!roomCode || roomCode.length !== 4) {
-    errorEl.textContent = "Enter the 4-character room code from the host screen.";
-    return;
-  }
-  if (!playerName) {
-    errorEl.textContent = "Enter your name or team name.";
-    return;
-  }
-
+  if (!roomCode || roomCode.length !== 4) { errorEl.textContent = "Enter the 4-character room code from the host screen."; return; }
+  if (!playerName) { errorEl.textContent = "Enter your name or team name."; return; }
   document.getElementById("joinBtn").disabled = true;
   document.getElementById("joinBtn").textContent = "Joining…";
-
   try {
     const exists = await roomExists(roomCode);
-    if (!exists) {
-      errorEl.textContent = "Room not found. Check the code and try again.";
-      document.getElementById("joinBtn").disabled = false;
-      document.getElementById("joinBtn").textContent = "Join game";
-      return;
-    }
-
+    if (!exists) { errorEl.textContent = "Room not found. Check the code and try again."; document.getElementById("joinBtn").disabled = false; document.getElementById("joinBtn").textContent = "Join game"; return; }
     const playerId = await joinRoom(roomCode, playerName);
-    state.roomCode = roomCode;
-    state.playerId = playerId;
-    state.playerName = playerName;
+    state.roomCode = roomCode; state.playerId = playerId; state.playerName = playerName;
     saveSession();
-
     enterLobby();
     startListening();
   } catch (err) {
@@ -156,30 +105,14 @@ async function handleJoin() {
 }
 
 async function tryRejoin(session) {
-  // Try to silently rejoin with the stored session.
   try {
     const exists = await roomExists(session.roomCode);
     if (!exists) { clearSession(); return false; }
-
     const playerId = await joinRoom(session.roomCode, session.playerName, session.playerId);
-    state.roomCode = session.roomCode;
-    state.playerId = playerId;
-    state.playerName = session.playerName;
-    // playerId may differ if the original no longer exists in the room.
-    saveSession();
-
-    enterLobby();
-    startListening();
-    return true;
-  } catch (e) {
-    clearSession();
-    return false;
-  }
+    state.roomCode = session.roomCode; state.playerId = playerId; state.playerName = session.playerName;
+    saveSession(); enterLobby(); startListening(); return true;
+  } catch (e) { clearSession(); return false; }
 }
-
-// ---------------------------------------------------------------------------
-// Lobby
-// ---------------------------------------------------------------------------
 
 function enterLobby() {
   document.getElementById("lobbyRoomCode").textContent = state.roomCode;
@@ -188,207 +121,77 @@ function enterLobby() {
 }
 
 // ---------------------------------------------------------------------------
-// Firebase listeners
-// ---------------------------------------------------------------------------
-
-function startListening() {
-  // Clean up any previous listeners.
-  if (state.unsubscribeMeta) state.unsubscribeMeta();
-  if (state.unsubscribeQuestion) state.unsubscribeQuestion();
-  if (state.unsubscribePlayers) state.unsubscribePlayers();
-
-  state.unsubscribeMeta = listenToMeta(state.roomCode, handleMetaChange);
-  state.unsubscribeQuestion = listenToCurrentQuestion(state.roomCode, handleQuestionChange);
-  state.unsubscribePlayers = listenToPlayers(state.roomCode, handlePlayersChange);
-}
-
-// Latest copies of remote state, so handlers can cross-reference.
-let latestMeta = null;
-let latestQuestion = null;
-let latestPlayers = {};
-let latestQuiz = null;
-
-function handleMetaChange(meta) {
-  if (!meta) return;
-  latestMeta = meta;
-
-  // Always render immediately with whatever we have.
-  renderForStatus(meta.status, meta);
-
-  // If we don't have the quiz yet, fetch it and re-render once it arrives.
-  // This covers the case where meta fires before the quiz fetch completes.
-  if (!latestQuiz) {
-    fetchQuiz().then(() => {
-      if (latestMeta) renderForStatus(latestMeta.status, latestMeta);
-    });
-  }
-}
-
-async function fetchQuiz() {
-  // One-time read of the quiz from the room node. We use listenToRoom
-  // with an immediate unsubscribe after the first value arrives — cleaner
-  // than a dynamic import and works reliably on GitHub Pages.
-  return new Promise((resolve) => {
-    const unsub = listenToRoom(state.roomCode, (room) => {
-      if (room?.quiz) {
-        latestQuiz = room.quiz;
-        unsub(); // stop listening after first value
-        resolve();
-      }
-    });
-  });
-}
-
-function handleQuestionChange(question) {
-  latestQuestion = question;
-  if (!latestMeta) return;
-  // Re-render whenever the question changes — this catches the case where
-  // the player was showing "Question incoming..." waiting for latestQuestion
-  // to arrive, and now it has.
-  renderForStatus(latestMeta.status, latestMeta);
-}
-
-function handlePlayersChange(players) {
-  latestPlayers = players || {};
-  // If the scoreboard is currently showing, re-render it with fresh data.
-  if (latestMeta && (latestMeta.status === ROOM_STATUS.ROUND_SCOREBOARD ||
-      latestMeta.status === ROOM_STATUS.FINAL_CEREMONY)) {
-    renderForStatus(latestMeta.status, latestMeta);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Status → screen router
+// Status router
 // ---------------------------------------------------------------------------
 
 function renderForStatus(status, meta) {
   switch (status) {
-    case ROOM_STATUS.LOBBY:
-      enterLobby();
-      break;
-
+    case ROOM_STATUS.LOBBY: enterLobby(); break;
     case ROOM_STATUS.TRANSITION_CARD:
       if (!latestQuiz) { showWaiting("Get ready…", "Loading round info…"); return; }
-      renderTransitionCard(meta);
-      break;
-
+      renderTransitionCard(meta); break;
     case ROOM_STATUS.RULE_EXPLAINER:
       if (!latestQuiz) { showWaiting("Get ready…", "Loading round info…"); return; }
-      renderExplainer(meta);
-      break;
-
+      renderExplainer(meta); break;
     case ROOM_STATUS.QUESTION_ACTIVE:
       if (!latestQuiz) { showWaiting("Get ready…", "Loading question…"); return; }
       if (!latestQuestion) { showWaiting("Get ready…", "Question incoming…"); return; }
-      renderActiveQuestion(latestQuestion, meta);
-      break;
-
-    case ROOM_STATUS.ROUND_RECAP:
-      showWaiting("Round recap", "The host is reviewing everyone's answers…");
-      break;
-
-    case ROOM_STATUS.ROUND_SCOREBOARD:
-      renderScoreboard(meta, false);
-      break;
-
-    case ROOM_STATUS.FINAL_CEREMONY:
-      renderCeremony(meta);
-      break;
-
-    case ROOM_STATUS.ENDED:
-      showWaiting("Game over", "Thanks for playing!");
-      break;
-
-    default:
-      showWaiting("One moment…", "");
+      renderActiveQuestion(latestQuestion, meta); break;
+    case ROOM_STATUS.ROUND_RECAP: showWaiting("Round recap", "The host is reviewing everyone's answers…"); break;
+    case ROOM_STATUS.ROUND_SCOREBOARD: renderScoreboard(meta); break;
+    case ROOM_STATUS.FINAL_CEREMONY: renderCeremony(); break;
+    case ROOM_STATUS.ENDED: showWaiting("Game over", "Thanks for playing!"); break;
+    default: showWaiting("One moment…", "");
   }
 }
 
 // ---------------------------------------------------------------------------
-// Transition card
+// Transition card + rule explainer
 // ---------------------------------------------------------------------------
 
 function renderTransitionCard(meta) {
-  if (!latestQuiz) { showWaiting("Loading…", ""); return; }
   const round = latestQuiz.rounds[meta.currentRoundIndex];
   if (!round) return;
-
   document.getElementById("transitionIcon").textContent = ROUND_TYPE_ICONS[round.type] || "❓";
-  document.getElementById("transitionRoundNumber").textContent =
-    `Round ${meta.currentRoundIndex + 1}`;
+  document.getElementById("transitionRoundNumber").textContent = `Round ${meta.currentRoundIndex + 1}`;
   document.getElementById("transitionRoundTitle").textContent = round.title;
   showScreen("screenTransition");
 }
 
-// ---------------------------------------------------------------------------
-// Rule explainer
-// ---------------------------------------------------------------------------
-
 function renderExplainer(meta) {
-  if (!latestQuiz) { showWaiting("Loading…", ""); return; }
   const round = latestQuiz.rounds[meta.currentRoundIndex];
   if (!round) return;
-
-  const explainer = ROUND_EXPLAINERS[round.type];
-  document.getElementById("explainerTitle").textContent = explainer?.title || round.title;
-  document.getElementById("explainerBody").textContent =
-    explainer?.body || "Get ready for this round!";
+  const exp = ROUND_EXPLAINERS[round.type];
+  document.getElementById("explainerTitle").textContent = exp?.title || round.title;
+  document.getElementById("explainerBody").textContent = exp?.body || "";
   showScreen("screenExplainer");
 }
 
 // ---------------------------------------------------------------------------
-// Active question rendering
+// Active question dispatcher
 // ---------------------------------------------------------------------------
 
 function renderActiveQuestion(question, meta) {
-  if (!question || !latestQuiz) { showWaiting("Loading question…", ""); return; }
-
-  // If this is a new question (different ID), reset submission state.
-  if (question.questionId !== state.currentQuestionId) {
-    state.currentQuestionId = question.questionId;
-    state.hasSubmitted = false;
-  }
-
-  // If already submitted, show the submitted screen immediately.
-  if (state.hasSubmitted) {
-    showScreen("screenSubmitted");
-    return;
-  }
-
-  // If question is locked/revealed, also show submitted or waiting.
+  if (!question || !latestQuiz) return;
+  if (state.hasSubmitted) { showScreen("screenSubmitted"); return; }
   if (question.state === "locked" || question.state === "revealed") {
-    if (state.hasSubmitted) {
-      showScreen("screenSubmitted");
-    } else {
-      showWaiting("Time's up", "The host is revealing the answer…");
-    }
+    if (state.hasSubmitted) showScreen("screenSubmitted");
+    else showWaiting("Time's up", "The host is revealing the answer…");
     return;
   }
-
   const round = latestQuiz.rounds[meta.currentRoundIndex];
   if (!round) return;
-
-  // Get the actual question object from the quiz.
   const questionData = round.questions[meta.currentQuestionIndex];
   if (!questionData) return;
 
   switch (round.type) {
-    case ROUND_TYPES.WHERE_ARE_WE_GOING:
-      renderWawgScreen(question, questionData);
-      break;
+    case ROUND_TYPES.WHERE_ARE_WE_GOING: renderWawgScreen(question, questionData); break;
     case ROUND_TYPES.DESTINATION_TRIVIA:
-      if (questionData.inputMode === "multiple-choice") {
-        renderTriviaMCScreen(questionData);
-      } else {
-        renderTriviaFTScreen(questionData);
-      }
+      if (questionData.inputMode === "multiple-choice") renderTriviaMCScreen(questionData);
+      else renderTriviaFTScreen(questionData);
       break;
-    case ROUND_TYPES.MUSIC_ROUND:
-      renderMusicScreen(questionData);
-      break;
-    case ROUND_TYPES.CLOSEST_WINS:
-      renderClosestWinsScreen(question, questionData);
-      break;
+    case ROUND_TYPES.MUSIC_ROUND: renderMusicScreen(questionData); break;
+    case ROUND_TYPES.CLOSEST_WINS: renderClosestWinsScreen(question, questionData); break;
   }
 }
 
@@ -400,60 +203,57 @@ function renderWawgScreen(questionState, questionData) {
   const clueIndex = questionState.clueIndex ?? 0;
   const clue = questionData.clues[clueIndex] || "Waiting for clue…";
   const points = (questionData.pointsPerStage || WHERE_ARE_WE_GOING_DEFAULT_POINTS)[clueIndex];
-
   document.getElementById("wawgScoreChip").textContent = `${points} pts`;
   const clueEl = document.getElementById("wawgClue");
-
-  // Flash animation on new clue.
   if (clueEl.dataset.lastClue !== clue) {
     clueEl.textContent = clue;
     clueEl.dataset.lastClue = clue;
     clueEl.classList.remove("is-new");
-    void clueEl.offsetWidth; // force reflow to restart animation
+    void clueEl.offsetWidth;
     clueEl.classList.add("is-new");
   }
-
-  // Stage indicator dots.
   const indicator = document.getElementById("wawgStageIndicator");
   indicator.innerHTML = "";
-  const total = questionData.clues.length;
-  for (let i = 0; i < total; i++) {
+  questionData.clues.forEach((_, i) => {
     const dot = document.createElement("div");
-    dot.className = "wawg-stage-dot" +
-      (i < clueIndex ? " is-past" : i === clueIndex ? " is-active" : "");
+    dot.className = "wawg-stage-dot" + (i < clueIndex ? " is-past" : i === clueIndex ? " is-active" : "");
     indicator.appendChild(dot);
-  }
-
+  });
   document.getElementById("wawgInput").disabled = false;
   document.getElementById("wawgSubmitBtn").disabled = false;
   showScreen("screenWawg");
 }
 
+function handleWawgSubmit() {
+  if (state.hasSubmitted) return;
+  const value = document.getElementById("wawgInput").value.trim();
+  if (!value) return;
+  const clueIndex = latestQuestion?.clueIndex ?? 0;
+  state.hasSubmitted = true;
+  document.getElementById("wawgInput").disabled = true;
+  document.getElementById("wawgSubmitBtn").disabled = true;
+  showSubmitted(`"${value}"`);
+  submitAnswer(state.roomCode, state.currentQuestionId, state.playerId, value, { clueStageAtSubmit: clueIndex }).catch(console.error);
+}
+
 // ---------------------------------------------------------------------------
-// Destination Trivia: multiple choice
+// Destination Trivia — multiple choice
 // ---------------------------------------------------------------------------
 
 function renderTriviaMCScreen(questionData) {
   const imgEl = document.getElementById("triviaMCImage");
   const videoEl = document.getElementById("triviaMCVideo");
   if (questionData.videoUrl) {
-    // Video takes priority over image.
-    if (videoEl) {
-      videoEl.src = getYTEmbedUrl(questionData.videoUrl);
-      videoEl.style.display = "block";
-    }
+    if (videoEl) { videoEl.src = getYTEmbedUrl(questionData.videoUrl); videoEl.style.display = "block"; }
     imgEl.style.display = "none";
   } else if (questionData.imageUrl) {
-    imgEl.src = questionData.imageUrl;
-    imgEl.style.display = "block";
+    imgEl.src = questionData.imageUrl; imgEl.style.display = "block";
     if (videoEl) videoEl.style.display = "none";
   } else {
     imgEl.style.display = "none";
     if (videoEl) videoEl.style.display = "none";
   }
-
   document.getElementById("triviaMCPrompt").textContent = questionData.prompt;
-
   const container = document.getElementById("triviaMCOptions");
   container.innerHTML = "";
   (questionData.options || []).forEach((option, idx) => {
@@ -463,49 +263,34 @@ function renderTriviaMCScreen(questionData) {
     btn.addEventListener("click", () => handleMCSelect(idx, questionData, container));
     container.appendChild(btn);
   });
-
   showScreen("screenTriviaMC");
 }
 
 function handleMCSelect(selectedIdx, questionData, container) {
   if (state.hasSubmitted) return;
-
-  // Immediately lock UI, mark selected visually.
-  const btns = container.querySelectorAll(".mc-option-btn");
-  btns.forEach((btn, i) => {
-    btn.disabled = true;
-    if (i === selectedIdx) btn.classList.add("is-selected");
-  });
-
+  container.querySelectorAll(".mc-option-btn").forEach((btn, i) => { btn.disabled = true; if (i === selectedIdx) btn.classList.add("is-selected"); });
   state.hasSubmitted = true;
   showSubmitted(`Option ${selectedIdx + 1}: "${questionData.options[selectedIdx]}"`);
-
-  submitAnswer(state.roomCode, state.currentQuestionId, state.playerId,
-    String(selectedIdx)).catch(console.error);
+  submitAnswer(state.roomCode, state.currentQuestionId, state.playerId, String(selectedIdx)).catch(console.error);
 }
 
 // ---------------------------------------------------------------------------
-// Destination Trivia: free text
+// Destination Trivia — free text
 // ---------------------------------------------------------------------------
 
 function renderTriviaFTScreen(questionData) {
   const imgEl = document.getElementById("triviaFTImage");
   const videoEl = document.getElementById("triviaFTVideo");
   if (questionData.videoUrl) {
-    if (videoEl) {
-      videoEl.src = getYTEmbedUrl(questionData.videoUrl);
-      videoEl.style.display = "block";
-    }
+    if (videoEl) { videoEl.src = getYTEmbedUrl(questionData.videoUrl); videoEl.style.display = "block"; }
     imgEl.style.display = "none";
   } else if (questionData.imageUrl) {
-    imgEl.src = questionData.imageUrl;
-    imgEl.style.display = "block";
+    imgEl.src = questionData.imageUrl; imgEl.style.display = "block";
     if (videoEl) videoEl.style.display = "none";
   } else {
     imgEl.style.display = "none";
     if (videoEl) videoEl.style.display = "none";
   }
-
   document.getElementById("triviaFTPrompt").textContent = questionData.prompt;
   document.getElementById("triviaFTInput").value = "";
   document.getElementById("triviaFTInput").disabled = false;
@@ -517,33 +302,11 @@ function handleTriviaFTSubmit() {
   if (state.hasSubmitted) return;
   const value = document.getElementById("triviaFTInput").value.trim();
   if (!value) return;
-
   state.hasSubmitted = true;
   document.getElementById("triviaFTInput").disabled = true;
   document.getElementById("triviaFTSubmitBtn").disabled = true;
   showSubmitted(`"${value}"`);
-
-  submitAnswer(state.roomCode, state.currentQuestionId, state.playerId, value)
-    .catch(console.error);
-}
-
-// ---------------------------------------------------------------------------
-// Where Are We Going submit
-// ---------------------------------------------------------------------------
-
-function handleWawgSubmit() {
-  if (state.hasSubmitted) return;
-  const value = document.getElementById("wawgInput").value.trim();
-  if (!value) return;
-
-  const clueIndex = latestQuestion?.clueIndex ?? 0;
-  state.hasSubmitted = true;
-  document.getElementById("wawgInput").disabled = true;
-  document.getElementById("wawgSubmitBtn").disabled = true;
-  showSubmitted(`"${value}"`);
-
-  submitAnswer(state.roomCode, state.currentQuestionId, state.playerId, value,
-    { clueStageAtSubmit: clueIndex }).catch(console.error);
+  submitAnswer(state.roomCode, state.currentQuestionId, state.playerId, value).catch(console.error);
 }
 
 // ---------------------------------------------------------------------------
@@ -553,56 +316,44 @@ function handleWawgSubmit() {
 function renderMusicScreen(questionData) {
   const container = document.getElementById("musicBlanksContainer");
   container.innerHTML = "";
-
-  (questionData.blanks || []).forEach((blank) => {
-    const wrapper = document.createElement("div");
-    wrapper.className = "answer-blank";
-    const label = document.createElement("label");
-    label.className = "answer-blank-label";
+  (questionData.blanks || []).forEach(blank => {
+    const wrapper = document.createElement("div"); wrapper.className = "answer-blank";
+    const label = document.createElement("label"); label.className = "answer-blank-label";
     label.textContent = blank.label || (blank.type === "artist" ? "Artist" : "Song Title");
     label.htmlFor = `music-blank-${blank.id}`;
-    const input = document.createElement("input");
-    input.type = "text";
-    input.className = "answer-text-input";
-    input.id = `music-blank-${blank.id}`;
+    const input = document.createElement("input"); input.type = "text";
+    input.className = "answer-text-input"; input.id = `music-blank-${blank.id}`;
     input.dataset.blankId = blank.id;
     input.placeholder = blank.type === "artist" ? "Artist name…" : "Song title…";
     input.autocomplete = "off";
-    wrapper.appendChild(label);
-    wrapper.appendChild(input);
-    container.appendChild(wrapper);
+    wrapper.appendChild(label); wrapper.appendChild(input); container.appendChild(wrapper);
   });
-
   document.getElementById("musicSubmitBtn").disabled = false;
   showScreen("screenMusic");
 }
 
-function handleMusicSubmit(questionData) {
+function handleMusicSubmit() {
   if (state.hasSubmitted) return;
-
-  const blanks = questionData?.blanks || [];
+  if (!latestQuiz || !latestMeta) return;
+  const round = latestQuiz.rounds[latestMeta.currentRoundIndex];
+  const questionData = round?.questions[latestMeta.currentQuestionIndex];
+  if (!questionData) return;
+  const blanks = questionData.blanks || [];
   const values = {};
   let anyFilled = false;
-  blanks.forEach((blank) => {
+  blanks.forEach(blank => {
     const input = document.getElementById(`music-blank-${blank.id}`);
     const val = input ? input.value.trim() : "";
     values[blank.id] = val;
     if (val) anyFilled = true;
   });
-
   if (!anyFilled) return;
-
   state.hasSubmitted = true;
-  document.querySelectorAll("#musicBlanksContainer .answer-text-input")
-    .forEach(inp => { inp.disabled = true; });
+  document.querySelectorAll("#musicBlanksContainer .answer-text-input").forEach(inp => { inp.disabled = true; });
   document.getElementById("musicSubmitBtn").disabled = true;
-
-  const echoText = blanks.map(b => values[b.id] ? `${b.label || b.type}: "${values[b.id]}"` : "")
-    .filter(Boolean).join(" · ");
+  const echoText = blanks.map(b => values[b.id] ? `${b.label || b.type}: "${values[b.id]}"` : "").filter(Boolean).join(" · ");
   showSubmitted(echoText);
-
-  submitAnswer(state.roomCode, state.currentQuestionId, state.playerId, values)
-    .catch(console.error);
+  submitAnswer(state.roomCode, state.currentQuestionId, state.playerId, values).catch(console.error);
 }
 
 // ---------------------------------------------------------------------------
@@ -610,106 +361,72 @@ function handleMusicSubmit(questionData) {
 // ---------------------------------------------------------------------------
 
 function renderClosestWinsScreen(questionState, questionData) {
-  // Show the location image (primary clue) and optional caption.
-  const cwPromptEl = document.getElementById("cwPrompt");
+  // Show image
   const cwImageEl = document.getElementById("cwImage");
+  const cwPromptEl = document.getElementById("cwPrompt");
   if (cwImageEl) {
-    if (questionData.imageUrl) {
-      cwImageEl.src = questionData.imageUrl;
-      cwImageEl.style.display = "block";
-    } else {
-      cwImageEl.style.display = "none";
-    }
+    if (questionData.imageUrl) { cwImageEl.src = questionData.imageUrl; cwImageEl.style.display = "block"; }
+    else cwImageEl.style.display = "none";
   }
   cwPromptEl.textContent = questionData.caption || "Where was this photo taken?";
 
-  // Timer bar.
+  // Timer
   clearInterval(state.cwTimerInterval);
   const totalSecs = questionData.timeLimitSeconds || 30;
   const startedAt = questionState.startedAt;
-  const nowApprox = Date.now();
-  const elapsed = startedAt ? Math.max(0, (nowApprox - startedAt) / 1000) : 0;
+  const elapsed = startedAt ? Math.max(0, (Date.now() - startedAt) / 1000) : 0;
   let remaining = Math.max(0, totalSecs - elapsed);
-
   const bar = document.getElementById("cwTimerBar");
   bar.style.width = (remaining / totalSecs * 100) + "%";
   bar.classList.toggle("is-low", remaining < totalSecs * 0.25);
-
   state.cwTimerInterval = setInterval(() => {
     remaining = Math.max(0, remaining - 1);
     bar.style.width = (remaining / totalSecs * 100) + "%";
     bar.classList.toggle("is-low", remaining < totalSecs * 0.25);
-    if (remaining <= 0) {
-      clearInterval(state.cwTimerInterval);
-      if (!state.hasSubmitted) {
-        // Auto-submit whatever pin is placed (or nothing, if no pin).
-        handleCWSubmit(questionData);
-      }
-    }
+    if (remaining <= 0) { clearInterval(state.cwTimerInterval); if (!state.hasSubmitted) handleCWSubmit(); }
   }, 1000);
 
-  // Map — initialise only once per question.
+  // Map
   if (!state.playerMap) {
-    initPlayerMap(questionData);
+    initPlayerMap();
   } else {
-    // Reset marker from previous question.
-    if (state.playerMarker) {
-      state.playerMap.removeLayer(state.playerMarker);
-      state.playerMarker = null;
-    }
+    if (state.playerMarker) { state.playerMap.removeLayer(state.playerMarker); state.playerMarker = null; }
+    state.pendingLat = null; state.pendingLng = null;
     state.playerMap.setView([20, 0], 2);
     setTimeout(() => state.playerMap.invalidateSize(), 100);
   }
-
   document.getElementById("cwSubmitBtn").disabled = true;
   document.getElementById("cwSubmitBtn").textContent = "Drop a pin first";
   showScreen("screenClosestWins");
 }
 
-function initPlayerMap(questionData) {
-  // Blank tile layer — no place names, just geography. This matches
-  // the show's map which shows shapes but not labels.
+function initPlayerMap() {
   const map = L.map("playerMap", { zoomControl: true }).setView([20, 0], 2);
-
   L.tileLayer("https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png", {
-    attribution: "© OpenStreetMap contributors © CARTO",
-    subdomains: "abcd",
-    maxZoom: 19,
+    attribution: "© OpenStreetMap contributors © CARTO", subdomains: "abcd", maxZoom: 19,
   }).addTo(map);
-
-  map.on("click", (e) => {
+  map.on("click", e => {
     if (state.hasSubmitted) return;
     const { lat, lng } = e.latlng;
-    if (state.playerMarker) {
-      state.playerMarker.setLatLng([lat, lng]);
-    } else {
-      state.playerMarker = L.marker([lat, lng]).addTo(map);
-    }
+    if (state.playerMarker) state.playerMarker.setLatLng([lat, lng]);
+    else state.playerMarker = L.marker([lat, lng]).addTo(map);
+    state.pendingLat = lat; state.pendingLng = lng;
     const btn = document.getElementById("cwSubmitBtn");
-    btn.disabled = false;
-    btn.textContent = "Submit pin";
-    state.pendingLat = lat;
-    state.pendingLng = lng;
+    btn.disabled = false; btn.textContent = "Submit pin";
   });
-
   state.playerMap = map;
   setTimeout(() => map.invalidateSize(), 150);
 }
 
-function handleCWSubmit(questionData) {
+function handleCWSubmit() {
   if (state.hasSubmitted) return;
-  if (!state.pendingLat && !state.pendingLng) return;
-
+  if (state.pendingLat == null) return;
   clearInterval(state.cwTimerInterval);
   state.hasSubmitted = true;
   document.getElementById("cwSubmitBtn").disabled = true;
-
-  const lat = state.pendingLat;
-  const lng = state.pendingLng;
+  const lat = state.pendingLat, lng = state.pendingLng;
   showSubmitted(`Pin dropped at ${lat.toFixed(2)}°, ${lng.toFixed(2)}°`);
-
-  submitAnswer(state.roomCode, state.currentQuestionId, state.playerId,
-    { lat, lng }, { lat, lng }).catch(console.error);
+  submitAnswer(state.roomCode, state.currentQuestionId, state.playerId, { lat, lng }, { lat, lng }).catch(console.error);
 }
 
 // ---------------------------------------------------------------------------
@@ -725,40 +442,24 @@ function showSubmitted(echoText) {
 // Scoreboard
 // ---------------------------------------------------------------------------
 
-function renderScoreboard(meta, isFinal) {
-  document.getElementById("scoreboardTitle").textContent =
-    isFinal ? "Final scores" : `After round ${(meta.currentRoundIndex ?? 0) + 1}`;
-
-  const players = Object.entries(latestPlayers)
-    .map(([id, p]) => ({ id, name: p.name, score: p.score || 0 }))
-    .sort((a, b) => b.score - a.score);
-
+function renderScoreboard(meta) {
+  document.getElementById("scoreboardTitle").textContent = `After round ${(meta.currentRoundIndex ?? 0) + 1}`;
+  const players = Object.entries(latestPlayers).map(([id, p]) => ({ id, name: p.name, score: p.score || 0 })).sort((a, b) => b.score - a.score);
   const list = document.getElementById("scoreboardList");
   list.innerHTML = "";
-
   players.forEach((p, idx) => {
     const li = document.createElement("li");
     li.className = "scoreboard-entry" + (p.id === state.playerId ? " is-you" : "");
-
     const rank = document.createElement("span");
-    rank.className = "scoreboard-rank" +
-      (idx === 0 ? " is-first" : idx === 1 ? " is-second" : idx === 2 ? " is-third" : "");
+    rank.className = "scoreboard-rank" + (idx === 0 ? " is-first" : idx === 1 ? " is-second" : idx === 2 ? " is-third" : "");
     rank.textContent = idx + 1;
-
-    const name = document.createElement("span");
-    name.className = "scoreboard-name";
+    const name = document.createElement("span"); name.className = "scoreboard-name";
     name.textContent = p.name + (p.id === state.playerId ? " (you)" : "");
-
-    const score = document.createElement("span");
-    score.className = "scoreboard-score";
-    score.textContent = p.score + " pt" + (p.score === 1 ? "" : "s");
-
-    li.appendChild(rank);
-    li.appendChild(name);
-    li.appendChild(score);
+    const score = document.createElement("span"); score.className = "scoreboard-score";
+    score.textContent = `${p.score} pt${p.score === 1 ? "" : "s"}`;
+    li.appendChild(rank); li.appendChild(name); li.appendChild(score);
     list.appendChild(li);
   });
-
   showScreen("screenScoreboard");
 }
 
@@ -766,32 +467,17 @@ function renderScoreboard(meta, isFinal) {
 // Final ceremony
 // ---------------------------------------------------------------------------
 
-function renderCeremony(meta) {
-  const players = Object.entries(latestPlayers)
-    .map(([id, p]) => ({ id, name: p.name, score: p.score || 0 }))
-    .sort((a, b) => b.score - a.score);
-
+function renderCeremony() {
+  const players = Object.entries(latestPlayers).map(([id, p]) => ({ id, name: p.name, score: p.score || 0 })).sort((a, b) => b.score - a.score);
   if (players.length === 0) return;
-
   const winner = players[0];
   document.getElementById("ceremonyWinnerName").textContent = winner.name;
-  document.getElementById("ceremonyWinnerScore").textContent =
-    winner.score + " pt" + (winner.score === 1 ? "" : "s");
-
-  // Check for tiebreak note from meta.
-  const tieNote = document.getElementById("ceremonyTiebreakNote");
-  if (meta.tiebreakResolved) {
-    tieNote.textContent = "Won on tiebreak — fastest total answer time";
-    tieNote.style.display = "block";
-  } else {
-    tieNote.style.display = "none";
-  }
-
+  document.getElementById("ceremonyWinnerScore").textContent = `${winner.score} pt${winner.score === 1 ? "" : "s"}`;
   showScreen("screenCeremony");
 }
 
 // ---------------------------------------------------------------------------
-// Generic waiting
+// Waiting
 // ---------------------------------------------------------------------------
 
 function showWaiting(title, subtitle) {
@@ -801,60 +487,27 @@ function showWaiting(title, subtitle) {
 }
 
 // ---------------------------------------------------------------------------
-// Boot
+// Init
 // ---------------------------------------------------------------------------
 
 async function init() {
-  try {
-    initFirebase();
-  } catch (e) {
-    showWaiting("Setup error", e.message);
-    return;
-  }
+  try { initFirebase(); } catch (e) { showWaiting("Setup error", e.message); return; }
 
-  // Wire up static event listeners.
   document.getElementById("joinBtn").addEventListener("click", handleJoin);
-  document.getElementById("joinRoomCode").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") handleJoin();
-  });
-  document.getElementById("joinPlayerName").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") handleJoin();
-  });
-
+  document.getElementById("joinRoomCode").addEventListener("keydown", e => { if (e.key === "Enter") handleJoin(); });
+  document.getElementById("joinPlayerName").addEventListener("keydown", e => { if (e.key === "Enter") handleJoin(); });
   document.getElementById("wawgSubmitBtn").addEventListener("click", handleWawgSubmit);
-  document.getElementById("wawgInput").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") handleWawgSubmit();
-  });
-
+  document.getElementById("wawgInput").addEventListener("keydown", e => { if (e.key === "Enter") handleWawgSubmit(); });
   document.getElementById("triviaFTSubmitBtn").addEventListener("click", handleTriviaFTSubmit);
-  document.getElementById("triviaFTInput").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") handleTriviaFTSubmit();
-  });
+  document.getElementById("triviaFTInput").addEventListener("keydown", e => { if (e.key === "Enter") handleTriviaFTSubmit(); });
+  document.getElementById("musicSubmitBtn").addEventListener("click", handleMusicSubmit);
+  document.getElementById("cwSubmitBtn").addEventListener("click", handleCWSubmit);
 
-  // Music submit needs current question data — wire via a closure that
-  // reads latestQuiz/latestMeta at click time.
-  document.getElementById("musicSubmitBtn").addEventListener("click", () => {
-    if (!latestQuiz || !latestMeta) return;
-    const round = latestQuiz.rounds[latestMeta.currentRoundIndex];
-    const q = round?.questions[latestMeta.currentQuestionIndex];
-    handleMusicSubmit(q);
-  });
-
-  document.getElementById("cwSubmitBtn").addEventListener("click", () => {
-    if (!latestQuiz || !latestMeta) return;
-    const round = latestQuiz.rounds[latestMeta.currentRoundIndex];
-    const q = round?.questions[latestMeta.currentQuestionIndex];
-    handleCWSubmit(q);
-  });
-
-  // Try silent rejoin from localStorage.
   const session = loadSession();
   if (session?.roomCode && session?.playerId) {
     const rejoined = await tryRejoin(session);
     if (rejoined) return;
   }
-
-  // Fall through to the join screen.
   showScreen("screenJoin");
 }
 

@@ -4,52 +4,38 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Host — På Spåret</title>
-
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
-    rel="stylesheet"
-  />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
   <link rel="stylesheet" href="css/styles.css" />
   <link rel="stylesheet" href="css/host.css" />
 </head>
 <body>
 <div class="host-shell">
 
-  <!-- LOBBY -->
   <div class="host-screen lobby-host-screen is-active" id="hostScreenLobby">
     <div class="lobby-game-title">På Spåret</div>
-    <div class="lobby-join-instruction">
-      Join at <span class="join-url">vegandayman.github.io/pa-sparet/player.html</span>
-    </div>
+    <div class="lobby-join-instruction">Join at <span class="join-url">vegandayman.github.io/pa-sparet/player.html</span></div>
     <div class="lobby-room-code-display" id="hostLobbyCode">—</div>
     <div class="lobby-player-list" id="hostPlayerList"></div>
     <div class="lobby-quiz-summary" id="lobbyQuizSummary" style="display:none"></div>
   </div>
 
-  <!-- TRANSITION CARD -->
   <div class="host-screen transition-host-screen" id="hostScreenTransition">
     <div class="transition-host-icon" id="hostTransitionIcon"></div>
     <div class="transition-host-round-num" id="hostTransitionRoundNum"></div>
     <div class="transition-host-title" id="hostTransitionTitle"></div>
   </div>
 
-  <!-- RULE EXPLAINER -->
   <div class="host-screen explainer-host-screen" id="hostScreenExplainer">
     <div class="explainer-host-title" id="hostExplainerTitle"></div>
     <div class="explainer-host-body" id="hostExplainerBody"></div>
   </div>
 
-  <!-- WHERE ARE WE GOING -->
   <div class="host-screen wawg-host-screen" id="hostScreenWawg">
     <div class="wawg-layout">
-      <div class="wawg-video-container" id="wawgVideoContainer">
-        <div id="wawgYTPlayer"></div>
-      </div>
+      <div class="wawg-video-container"><div id="wawgYTPlayer"></div></div>
       <div class="wawg-side">
         <div class="wawg-clues-list" id="wawgCluesList"></div>
         <div class="wawg-answer-reveal" id="wawgAnswerReveal" style="display:none">
@@ -60,7 +46,6 @@
     </div>
   </div>
 
-  <!-- DESTINATION TRIVIA -->
   <div class="host-screen trivia-host-screen" id="hostScreenTrivia">
     <img class="trivia-host-image" id="hostTriviaImage" src="" alt="" style="display:none" />
     <div id="hostTriviaVideoContainer" style="display:none;width:100%;max-width:800px;"></div>
@@ -72,12 +57,9 @@
     </div>
   </div>
 
-  <!-- MUSIC ROUND -->
   <div class="host-screen music-host-screen" id="hostScreenMusic">
     <div class="music-layout">
-      <div class="music-video-container">
-        <div id="musicYTPlayer"></div>
-      </div>
+      <div class="music-video-container"><div id="musicYTPlayer"></div></div>
       <div class="music-blanks-host" id="musicBlanksHost"></div>
     </div>
     <div class="answer-review-panel" id="musicAnswerReview" style="display:none">
@@ -86,9 +68,8 @@
     </div>
   </div>
 
-  <!-- CLOSEST WINS -->
   <div class="host-screen cw-host-screen" id="hostScreenCW">
-    <!-- Image view: shown during question, hidden on reveal -->
+    <!-- Image view: shown during question -->
     <div id="cwImageView" style="display:flex;flex-direction:column;flex:1;align-items:center;justify-content:center;gap:var(--space-5);">
       <img id="cwHostImage" src="" alt="Location clue" style="max-height:65vh;max-width:100%;object-fit:contain;border-radius:var(--radius-lg);border:1px solid var(--color-slate-dim);" />
       <div style="display:flex;align-items:center;gap:var(--space-6);">
@@ -96,31 +77,26 @@
         <div class="cw-timer-display" id="cwHostTimer">—</div>
       </div>
     </div>
-    <!-- Map view: hidden during question, shown on reveal -->
-    <div id="cwMapView" style="display:none;flex:1;min-height:0;gap:var(--space-4);flex-direction:row;" class="cw-host-layout">
-      <div class="cw-host-map-container" style="flex:1;min-height:0;">
-        <div id="hostMap" style="width:100%;height:100%;"></div>
-      </div>
-      <div class="cw-host-side" style="width:300px;">
+    <!-- Map view: shown on reveal -->
+    <div id="cwMapView" style="display:none;flex:1;min-height:0;" class="cw-host-layout">
+      <div class="cw-host-map-container"><div id="hostMap" style="width:100%;height:100%;"></div></div>
+      <div class="cw-host-side">
         <div class="cw-host-prompt" id="cwHostPromptReveal"></div>
         <div class="cw-pins-list" id="cwPinsList"></div>
       </div>
     </div>
   </div>
 
-  <!-- ROUND RECAP -->
   <div class="host-screen recap-host-screen" id="hostScreenRecap">
     <h2 id="recapTitle">Round recap</h2>
     <div id="recapContent"></div>
   </div>
 
-  <!-- ROUND SCOREBOARD -->
   <div class="host-screen scoreboard-host-screen" id="hostScreenScoreboard">
     <h2 id="scoreboardHostTitle">Scoreboard</h2>
     <ul class="scoreboard-host-list" id="scoreboardHostList"></ul>
   </div>
 
-  <!-- FINAL CEREMONY -->
   <div class="host-screen ceremony-host-screen" id="hostScreenCeremony">
     <div class="ceremony-host-eyebrow">Winner</div>
     <div class="ceremony-host-winner" id="ceremonyHostWinner"></div>
@@ -131,12 +107,9 @@
 
 </div>
 
-<!-- HOST CONTROL BAR (always visible) -->
 <div class="host-controls">
   <div class="host-controls-left">
-    <div class="host-room-code">
-      Room: <span id="controlBarRoomCode">—</span>
-    </div>
+    <div class="host-room-code">Room: <span id="controlBarRoomCode">—</span></div>
     <div class="host-status-label" id="controlBarStatus"></div>
   </div>
   <div class="host-controls-center">
@@ -153,8 +126,7 @@
   </div>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script type="module" src="js/host.js"></script>
 </body>
 </html>
