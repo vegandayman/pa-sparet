@@ -125,6 +125,10 @@ async function submitAnswer(roomCode, questionId, playerId, value, extra = {}) {
   await set(ref(getDb(), `rooms/${roomCode}/answers/${questionId}/${playerId}`), { value, submittedAt: serverTimestamp(), pointsAwarded: null, hostOverride: null, ...extra });
 }
 
+async function updateQuiz(roomCode, quiz) {
+  await set(ref(getDb(), `rooms/${roomCode}/quiz`), quiz);
+}
+
 async function awardPoints(roomCode, questionId, playerId, points, isOverride = false) {
   await update(ref(getDb(), `rooms/${roomCode}/answers/${questionId}/${playerId}`), { pointsAwarded: points, hostOverride: isOverride });
   await incrementPlayerScore(roomCode, playerId, points);
@@ -181,4 +185,4 @@ function listenToAnswersForQuestion(roomCode, questionId, callback) {
   return () => off(r);
 }
 
-export { ROOM_STATUS, initFirebase, generateRoomCode, generateUniqueRoomCode, createRoom, setRoomStatus, setCurrentRoundQuestion, hasRoundTypeBeenExplained, markRoundTypeExplained, deleteRoom, roomExists, setCurrentQuestion, updateCurrentQuestion, lockCurrentQuestion, revealCurrentQuestion, joinRoom, incrementPlayerScore, setPlayerScore, renamePlayer, kickPlayer, fetchAnswersForQuestions, fetchFinalGameData, submitAnswer, awardPoints, listenToRoom, listenToMeta, listenToPlayers, listenToCurrentQuestion, listenToAnswersForQuestion };
+export { ROOM_STATUS, initFirebase, generateRoomCode, generateUniqueRoomCode, createRoom, setRoomStatus, setCurrentRoundQuestion, hasRoundTypeBeenExplained, markRoundTypeExplained, deleteRoom, roomExists, setCurrentQuestion, updateCurrentQuestion, lockCurrentQuestion, revealCurrentQuestion, joinRoom, incrementPlayerScore, setPlayerScore, renamePlayer, kickPlayer, fetchAnswersForQuestions, fetchFinalGameData, submitAnswer, awardPoints, listenToRoom, listenToMeta, listenToPlayers, listenToCurrentQuestion, listenToAnswersForQuestion, updateQuiz };

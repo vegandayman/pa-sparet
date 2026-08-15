@@ -4,7 +4,7 @@ import { initFirebase, ROOM_STATUS, createRoom, setRoomStatus, setCurrentRoundQu
   setCurrentQuestion, updateCurrentQuestion, lockCurrentQuestion, revealCurrentQuestion,
   awardPoints, listenToMeta, listenToPlayers, listenToCurrentQuestion,
   listenToAnswersForQuestion, fetchAnswersForQuestions, fetchFinalGameData,
-  hasRoundTypeBeenExplained, markRoundTypeExplained, deleteRoom, roomExists }
+  hasRoundTypeBeenExplained, markRoundTypeExplained, deleteRoom, roomExists, updateQuiz }
   from "./firebase-sync.js";
 
 import { ROUND_TYPES, ROUND_TYPE_LABELS, validateQuiz,
@@ -443,6 +443,8 @@ function handleQuizFile(event) {
       quiz = parsed;
       renderQuizSummary(quiz);
       syncControlBar(latestMeta || { status: ROOM_STATUS.LOBBY });
+      // Write the quiz to Firebase so all connected players can read it.
+      if (roomCode) updateQuiz(roomCode, quiz).catch(console.error);
     } catch (e) { alert("Could not parse quiz file: " + e.message); }
   };
   reader.readAsText(file);
