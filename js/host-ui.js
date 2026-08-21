@@ -121,9 +121,12 @@ export function renderAnswerReview(panelId, rowsId, answers, players, correctChe
     const name = document.createElement("span"); name.className = "answer-row-name"; name.textContent = player.name;
     const value = document.createElement("span"); value.className = "answer-row-value"; value.textContent = formatAnswerValue(answer.value);
     const status = document.createElement("span"); status.className = "answer-row-status";
-    if (answer.hostOverride) { status.className += " is-override"; status.textContent = "override ✓"; }
+    if (answer.hostOverride === true) { status.className += " is-override"; status.textContent = "override ✓"; }
     else if (answer.pointsAwarded > 0) { status.className += " is-correct"; status.textContent = `+${answer.pointsAwarded} ✓`; }
-    else { const isOk = correctChecker ? correctChecker(answer.value) : false; status.className += isOk ? " is-correct" : " is-wrong"; status.textContent = isOk ? "correct" : "wrong"; }
+    else if (answer.pointsAwarded === false || answer.pointsAwarded === undefined) {
+      const isOk = correctChecker ? correctChecker(answer.value) : false;
+      status.className += isOk ? " is-correct" : " is-wrong"; status.textContent = isOk ? "correct" : "wrong";
+    } else { status.className += " is-wrong"; status.textContent = "wrong"; }
     row.appendChild(name); row.appendChild(value); row.appendChild(status);
     if (!answer.pointsAwarded || answer.pointsAwarded === 0) {
       const btn = document.createElement("button"); btn.className = "btn btn-secondary override-btn"; btn.textContent = "Award point";

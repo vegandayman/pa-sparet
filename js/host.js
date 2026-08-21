@@ -295,7 +295,9 @@ async function revealNextClue() {
 
 async function scoreAllAnswers(round, q) {
   const promises = Object.entries(activeAnswers).map(async ([playerId, answer]) => {
-    if (answer.pointsAwarded !== null) return;
+    // pointsAwarded is false (unscored) or a number (already scored).
+    // Firebase drops null so we use false as the unscored sentinel.
+    if (answer.pointsAwarded !== false && answer.pointsAwarded !== undefined) return;
     if (round.type === ROUND_TYPES.CLOSEST_WINS) return; // scored as group below
     let points = 0;
     switch (round.type) {

@@ -122,7 +122,9 @@ async function renamePlayer(roomCode, playerId, newName) { await update(ref(getD
 async function kickPlayer(roomCode, playerId) { await remove(ref(getDb(), `rooms/${roomCode}/players/${playerId}`)); }
 
 async function submitAnswer(roomCode, questionId, playerId, value, extra = {}) {
-  await set(ref(getDb(), `rooms/${roomCode}/answers/${questionId}/${playerId}`), { value, submittedAt: serverTimestamp(), pointsAwarded: null, hostOverride: null, ...extra });
+  // Use false (not null) for pointsAwarded — Firebase drops null values entirely,
+  // which breaks the "already scored?" guard in scoreAllAnswers.
+  await set(ref(getDb(), `rooms/${roomCode}/answers/${questionId}/${playerId}`), { value, submittedAt: serverTimestamp(), pointsAwarded: false, hostOverride: false, ...extra });
 }
 
 async function updateQuiz(roomCode, quiz) {
