@@ -52,8 +52,8 @@
 .answer-text-input:focus{border-color:var(--color-brass);}
 .answer-text-input:disabled{opacity:0.5;cursor:not-allowed;}
 .submit-btn{width:100%;padding:var(--space-4);font-size:var(--text-lg);border-radius:var(--radius-md);margin-top:var(--space-2);}
-.cw-map-container{flex:1;min-height:0;border-radius:var(--radius-md);overflow:hidden;border:1px solid var(--color-slate-dim);position:relative;}
-.cw-map-container #playerMap{width:100%;height:100%;}
+.cw-map-container{flex:1;min-height:280px;border-radius:var(--radius-md);overflow:hidden;border:1px solid var(--color-slate-dim);position:relative;}
+.cw-map-container #playerMap{width:100%;height:100%;min-height:280px;}
 .cw-timer-bar-wrap{height:4px;background:var(--color-panel-alt);border-radius:2px;overflow:hidden;}
 .cw-timer-bar{height:100%;background:var(--color-brass);transition:width 1s linear,background 1s linear;}
 .cw-timer-bar.is-low{background:var(--color-rust);}
