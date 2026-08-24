@@ -386,18 +386,19 @@ function renderClosestWinsScreen(questionState, questionData) {
     if (remaining <= 0) { clearInterval(state.cwTimerInterval); if (!state.hasSubmitted) handleCWSubmit(); }
   }, 1000);
 
-  // Map
+  document.getElementById("cwSubmitBtn").disabled = true;
+  document.getElementById("cwSubmitBtn").textContent = "Drop a pin first";
+  // Show the screen FIRST so the map container has real dimensions,
+  // then init/reset the map — Leaflet fails silently on hidden elements.
+  showScreen("screenClosestWins");
   if (!state.playerMap) {
-    initPlayerMap();
+    setTimeout(() => initPlayerMap(), 50);
   } else {
     if (state.playerMarker) { state.playerMap.removeLayer(state.playerMarker); state.playerMarker = null; }
     state.pendingLat = null; state.pendingLng = null;
     state.playerMap.setView([20, 0], 2);
     setTimeout(() => state.playerMap.invalidateSize(), 100);
   }
-  document.getElementById("cwSubmitBtn").disabled = true;
-  document.getElementById("cwSubmitBtn").textContent = "Drop a pin first";
-  showScreen("screenClosestWins");
 }
 
 function initPlayerMap() {
